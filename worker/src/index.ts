@@ -15,7 +15,7 @@ const searchButtonDomSelector = '#autocompleteWrapper a[_clickcode="search"]';
 const totalCountDomSelector = '.subFilter_num__2x0jq';
 const storeLinkDomSelector = '.basicList_mall__sbVax';
 const storeDetailDomName = 'common_btn_detail__1Fu0c';
-//const paginationDomSelector = '.pagination_btn_page__FuJaU';
+const paginationDomSelector = '.pagination_num__-IkyP a';
 
 interface IEmailCollector {
   execute(): void;
@@ -24,10 +24,14 @@ interface IEmailCollector {
 class EmailCollector implements IEmailCollector {
   private puppeteer: Puppeteer;
   private cheerio: Cheerio;
+  private remainingStoreCount: number;
+  private paginationView: number;
 
   constructor(puppeteer: Puppeteer, cheerio: Cheerio) {
     this.puppeteer = puppeteer;
     this.cheerio = cheerio;
+    this.remainingStoreCount = 0;
+    this.paginationView = 40;
   }
 
   execute(): void {
@@ -38,20 +42,29 @@ class EmailCollector implements IEmailCollector {
     const browser = await this.puppeteer.launch({ headless: false });
     const page = await browser.newPage();
     await page.goto(searchTarget, { waitUntil: 'networkidle2' });
-    await page.setViewport({ width: 1440, height: 90000 });
+    await page.setViewport({ width: 1024, height: 999999 });
 
     const searchResultPage = await this.performSearch(searchBarDomSelector, searchButtonDomSelector, searchTerm, page);
 
-    const totalResultCount = await this.getTotalResultCount(searchResultPage, totalCountDomSelector);
+    const totalStoreCount = await this.getTotalResultCount(searchResultPage, totalCountDomSelector);
+    //TODO: save totalStoreCount in Redis
 
-    console.log(totalResultCount);
+    this.remainingStoreCount = totalStoreCount;
 
-    const storesLinksFromResult = await this.getStoreLinksFromResult(searchResultPage, storeLinkDomSelector);
+    while (this.remainingStoreCount >= 0) {
+      console.log(`remaining stores ${this.remainingStoreCount - this.paginationView}`);
 
-    console.log(storesLinksFromResult);
+      const storesLinksFromResult = await this.getStoreLinksFromResult(searchResultPage, storeLinkDomSelector);
+      console.log(storesLinksFromResult);
 
-    const targetStores = this.filterTargetStores(storesLinksFromResult, storeDetailDomName);
-    console.log(targetStores);
+      const targetStores = this.filterTargetStores(storesLinksFromResult, storeDetailDomName);
+      console.log(targetStores);
+
+      this.remainingStoreCount -= this.paginationView;
+
+      await searchResultPage.click(paginationDomSelector);
+    }
+
     // save targetStores in DB
   }
 
