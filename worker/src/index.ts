@@ -14,7 +14,7 @@ const searchBarDomSelector = '#autocompleteWrapper input[name="query"]';
 const searchButtonDomSelector = '#autocompleteWrapper a[_clickcode="search"]';
 const totalCountDomSelector = '.subFilter_num__2x0jq';
 const storeLinkDomSelector = '.basicList_mall__sbVax';
-const storeDetailDomSelector = 'common_btn_detail__1Fu0c';
+const storeDetailDomName = 'common_btn_detail__1Fu0c';
 //const paginationDomSelector = '.pagination_btn_page__FuJaU';
 
 interface IEmailCollector {
@@ -50,7 +50,7 @@ class EmailCollector implements IEmailCollector {
 
     console.log(storesLinksFromResult);
 
-    const targetStores = this.filterTargetStores(storesLinksFromResult, storeDetailDomSelector);
+    const targetStores = this.filterTargetStores(storesLinksFromResult, storeDetailDomName);
     console.log(targetStores);
     // save targetStores in DB
   }
