@@ -9,7 +9,7 @@ type Puppeteer = typeof puppeteer;
 console.log('hey worker is running');
 
 const searchTarget = config.MAIN_SEARCH_URL || 's';
-const searchTerm = '신발';
+const searchTerm = '블루투스이어폰';
 const searchBarDomSelector = '#autocompleteWrapper input[name="query"]';
 const searchButtonDomSelector = '#autocompleteWrapper a[_clickcode="search"]';
 const totalCountDomSelector = '.subFilter_num__2x0jq';
@@ -64,9 +64,10 @@ class EmailCollector implements IEmailCollector {
 
     while (this.remainingStoreCount >= 0) {
       console.log(`remaining stores ${this.remainingStoreCount - this.paginationView}`);
-      //console.log(this.collectedStores);
 
       const storesLinksFromResult = await this.getStoreLinksFromResult(searchResultPage, storeLinkDomSelector);
+
+      //console.log(storesLinksFromResult);
 
       await this.scrapeTargetStoreFromResults(storesLinksFromResult, storeDetailDomName);
 
@@ -119,7 +120,6 @@ class EmailCollector implements IEmailCollector {
       const targetStore = this.getTargetStore(stores[i], storeDetailSelector);
 
       if (targetStore) {
-        console.log(targetStore);
         await this.getStoreDetailFromStorePage(targetStore);
         this.collectedStores.push(targetStore);
       }
@@ -135,6 +135,7 @@ class EmailCollector implements IEmailCollector {
       const nextNodeAttributes = nextElement.attribs;
 
       if (nextNodeAttributes.type === 'button' && nextNodeAttributes.class === storeDetailSelector) {
+        console.log(store);
         const storeName = store.children[0].data;
         const storeLink = store.attribs.href;
 
