@@ -21,17 +21,28 @@ interface IEmailCollector {
   execute(): void;
 }
 
+type TargetStore = {
+  storeName: string;
+  storeLink: string;
+  email?: string;
+  searchTerm?: string;
+  phoneNumber?: string;
+};
+
 class EmailCollector implements IEmailCollector {
   private puppeteer: Puppeteer;
   private cheerio: Cheerio;
   private remainingStoreCount: number;
   private paginationView: number;
+  private collectedStores: TargetStore[];
 
   constructor(puppeteer: Puppeteer, cheerio: Cheerio) {
     this.puppeteer = puppeteer;
     this.cheerio = cheerio;
     this.remainingStoreCount = 0;
     this.paginationView = 40;
+    this.collectedStores = [];
+    // TODO: add collectedStore unchanged count, if exceed certain threshold, terminate the process
   }
 
   execute(): void {
@@ -53,12 +64,11 @@ class EmailCollector implements IEmailCollector {
 
     while (this.remainingStoreCount >= 0) {
       console.log(`remaining stores ${this.remainingStoreCount - this.paginationView}`);
+      //console.log(this.collectedStores);
 
       const storesLinksFromResult = await this.getStoreLinksFromResult(searchResultPage, storeLinkDomSelector);
-      console.log(storesLinksFromResult);
 
-      const targetStores = this.filterTargetStores(storesLinksFromResult, storeDetailDomName);
-      console.log(targetStores);
+      await this.scrapeTargetStoreFromResults(storesLinksFromResult, storeDetailDomName);
 
       this.remainingStoreCount -= this.paginationView;
 
@@ -101,26 +111,52 @@ class EmailCollector implements IEmailCollector {
     });
   }
 
-  private filterTargetStores(stores: Record<string, any>[], storeDetailSelector: string): Record<string, any>[] {
-    const result = [];
-
+  private async scrapeTargetStoreFromResults(
+    stores: Record<string, any>[],
+    storeDetailSelector: string,
+  ): Promise<TargetStore[]> {
     for (let i = 0; i < stores.length; i++) {
-      const nextElement = stores[i].next as Record<string, any>;
+      const targetStore = this.getTargetStore(stores[i], storeDetailSelector);
 
-      if (nextElement) {
-        const nextNodeAttributes = nextElement.attribs;
-
-        if (nextNodeAttributes.type === 'button' && nextNodeAttributes.class === storeDetailSelector) {
-          const store = stores[i] as Record<string, any>;
-          const storeName = store.children[0].data;
-          const storeLink = store.attribs.href;
-
-          result.push({ storeName: storeName, storeLink: storeLink });
-        }
+      if (targetStore) {
+        console.log(targetStore);
+        await this.getStoreDetailFromStorePage(targetStore);
+        this.collectedStores.push(targetStore);
       }
     }
 
-    return result;
+    return Promise.resolve(this.collectedStores);
+  }
+
+  private getTargetStore(store: Record<string, any>, storeDetailSelector: string): TargetStore | null {
+    const nextElement = store.next as Record<string, any>;
+
+    if (nextElement) {
+      const nextNodeAttributes = nextElement.attribs;
+
+      if (nextNodeAttributes.type === 'button' && nextNodeAttributes.class === storeDetailSelector) {
+        const storeName = store.children[0].data;
+        const storeLink = store.attribs.href;
+
+        const isDuplicate = this.collectedStores.find((e) => e.storeName === storeName);
+        const targetStore = { storeName: storeName, storeLink: storeLink };
+
+        if (!isDuplicate) return targetStore;
+      }
+    }
+
+    return null;
+  }
+
+  private async getStoreDetailFromStorePage(targetStore: TargetStore) {
+    const secondBrowser = await this.puppeteer.launch({ headless: false });
+    const storeDetailPage = await secondBrowser.newPage();
+    await storeDetailPage.goto(targetStore.storeLink, { waitUntil: 'networkidle2' });
+    await storeDetailPage.setViewport({ width: 1024, height: 999999 });
+
+    storeDetailPage.waitForTimeout(3000).then(async () => {
+      await secondBrowser.close();
+    });
   }
 }
 
