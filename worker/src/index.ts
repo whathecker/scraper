@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-useless-catch*/
 import config from './config';
 import puppeteer from 'puppeteer';
 import cheerio from 'cheerio';
@@ -13,20 +14,31 @@ const searchTerm = '블루투스이어폰';
 const searchBarDomSelector = '#autocompleteWrapper input[name="query"]';
 const searchButtonDomSelector = '#autocompleteWrapper a[_clickcode="search"]';
 const totalCountDomSelector = '.subFilter_num__2x0jq';
-const storeLinkDomSelector = '.basicList_mall__sbVax';
+
+const storeNameLinkDomSelector = '.basicList_mall__sbVax';
 const storeDetailDomName = 'common_btn_detail__1Fu0c';
 const paginationDomSelector = '.pagination_num__-IkyP a';
+
+const storeDetailTableSelector = '._3fpUfPAXM5';
+const emailDomSelector = '._2bY0n46Os8';
 
 interface IEmailCollector {
   execute(): void;
 }
-
 type TargetStore = {
+  storeName: string;
+  storeLink: string;
+};
+
+type CollectedStoreInfo = {
   storeName: string;
   storeLink: string;
   email?: string;
   searchTerm?: string;
-  phoneNumber?: string;
+  storeOwner?: string;
+  businessRegNum?: string;
+  ecomRegNum?: string;
+  address?: string;
 };
 
 class EmailCollector implements IEmailCollector {
@@ -34,7 +46,8 @@ class EmailCollector implements IEmailCollector {
   private cheerio: Cheerio;
   private remainingStoreCount: number;
   private paginationView: number;
-  private collectedStores: TargetStore[];
+  private collectedStores: CollectedStoreInfo[];
+  private searchTerm: string;
 
   constructor(puppeteer: Puppeteer, cheerio: Cheerio) {
     this.puppeteer = puppeteer;
@@ -42,21 +55,28 @@ class EmailCollector implements IEmailCollector {
     this.remainingStoreCount = 0;
     this.paginationView = 40;
     this.collectedStores = [];
+    this.searchTerm = '';
     // TODO: add collectedStore unchanged count, if exceed certain threshold, terminate the process
   }
 
   execute(): void {
-    this.startCollectionProcess();
+    this.startCollectionProcess(searchTerm);
   }
 
-  private async startCollectionProcess() {
-    const browser = await this.puppeteer.launch({ headless: false });
+  private async startCollectionProcess(searchTerm: string) {
+    this.searchTerm = searchTerm;
+
+    const browser = await this.puppeteer.launch();
     const page = await browser.newPage();
     await page.goto(searchTarget, { waitUntil: 'networkidle2' });
     await page.setViewport({ width: 1024, height: 999999 });
 
-    const searchResultPage = await this.performSearch(searchBarDomSelector, searchButtonDomSelector, searchTerm, page);
-
+    const searchResultPage = await this.performSearch(
+      searchBarDomSelector,
+      searchButtonDomSelector,
+      this.searchTerm,
+      page,
+    );
     const totalStoreCount = await this.getTotalResultCount(searchResultPage, totalCountDomSelector);
     //TODO: save totalStoreCount in Redis
 
@@ -65,18 +85,13 @@ class EmailCollector implements IEmailCollector {
     while (this.remainingStoreCount >= 0) {
       console.log(`remaining stores ${this.remainingStoreCount - this.paginationView}`);
 
-      const storesLinksFromResult = await this.getStoreLinksFromResult(searchResultPage, storeLinkDomSelector);
-
-      //console.log(storesLinksFromResult);
-
-      await this.scrapeTargetStoreFromResults(storesLinksFromResult, storeDetailDomName);
+      const storesLinksFromResult = await this.getStoreLinksFromResult(searchResultPage, storeNameLinkDomSelector);
+      const targetStores = this.filterTargetStores(storesLinksFromResult, storeDetailDomName);
+      await this.scrapeTargetStoreFromResults(targetStores, storeDetailTableSelector, emailDomSelector);
 
       this.remainingStoreCount -= this.paginationView;
-
       await searchResultPage.click(paginationDomSelector);
     }
-
-    // save targetStores in DB
   }
 
   private async performSearch(searchBarSelector: string, searchBtnSelector: string, keyword: string, page: any) {
@@ -103,7 +118,7 @@ class EmailCollector implements IEmailCollector {
     searchResultPage: any,
     storeLinkSelector: string,
   ): Promise<Record<string, any>[]> {
-    return searchResultPage.waitForTimeout(2000).then(async () => {
+    return searchResultPage.waitForTimeout(500).then(async () => {
       const dom = await searchResultPage.content();
       const $searchResult = this.cheerio.load(dom);
       const storeLinks = $searchResult(storeLinkSelector);
@@ -112,52 +127,106 @@ class EmailCollector implements IEmailCollector {
     });
   }
 
-  private async scrapeTargetStoreFromResults(
-    stores: Record<string, any>[],
-    storeDetailSelector: string,
-  ): Promise<TargetStore[]> {
+  private filterTargetStores(stores: Record<string, any>[], storeDetailSelector: string): TargetStore[] {
+    const result = [];
+
     for (let i = 0; i < stores.length; i++) {
-      const targetStore = this.getTargetStore(stores[i], storeDetailSelector);
+      const nextElement = stores[i].next as Record<string, any>;
 
-      if (targetStore) {
-        await this.getStoreDetailFromStorePage(targetStore);
-        this.collectedStores.push(targetStore);
+      if (nextElement) {
+        const nextNodeAttributes = nextElement.attribs;
+
+        if (nextNodeAttributes.type === 'button' && nextNodeAttributes.class === storeDetailSelector) {
+          const store = stores[i] as Record<string, any>;
+
+          const wrapperNode = store.parent.parent.parent;
+          const nodeWithLinkToProduct = wrapperNode.children[1].children[0].children[0];
+
+          const storeName = store.children[0].data;
+          const storeLink = nodeWithLinkToProduct.attribs.href;
+
+          if (storeName && storeLink) {
+            const targetStore: TargetStore = { storeName: storeName, storeLink: storeLink };
+            result.push(targetStore);
+          }
+        }
       }
     }
 
-    return Promise.resolve(this.collectedStores);
+    return result;
   }
 
-  private getTargetStore(store: Record<string, any>, storeDetailSelector: string): TargetStore | null {
-    const nextElement = store.next as Record<string, any>;
+  private async scrapeTargetStoreFromResults(
+    stores: TargetStore[],
+    storeDetailSelector: string,
+    emailSelector: string,
+  ): Promise<void> {
+    for (let i = 0; i < stores.length; i++) {
+      const store = stores[i];
+      const storeLink = store.storeLink;
+      const storeName = store.storeName;
 
-    if (nextElement) {
-      const nextNodeAttributes = nextElement.attribs;
+      const result = this.isStoreDuplicate(storeName);
 
-      if (nextNodeAttributes.type === 'button' && nextNodeAttributes.class === storeDetailSelector) {
-        console.log(store);
-        const storeName = store.children[0].data;
-        const storeLink = store.attribs.href;
+      if (!result) {
+        try {
+          const secondBrowser = await this.puppeteer.launch();
+          const storeDetailPage = await secondBrowser.newPage();
 
-        const isDuplicate = this.collectedStores.find((e) => e.storeName === storeName);
-        const targetStore = { storeName: storeName, storeLink: storeLink };
+          await storeDetailPage.goto(storeLink, { waitUntil: 'networkidle2' });
+          await storeDetailPage.setViewport({ width: 1024, height: 999999 });
 
-        if (!isDuplicate) return targetStore;
+          const html = await storeDetailPage.content();
+          const dom = this.cheerio.load(html);
+          const storeInfos = dom(storeDetailSelector);
+
+          if (storeInfos.length > 0) {
+            const storeDetail = this.getStoreDetail(dom, store, storeDetailSelector, emailSelector);
+            this.collectedStores.push(storeDetail);
+            console.log(this.collectedStores);
+            console.log(this.collectedStores.length);
+            // save store detail here
+          }
+          await secondBrowser.close();
+        } catch (e) {
+          throw e;
+        }
       }
     }
-
-    return null;
   }
 
-  private async getStoreDetailFromStorePage(targetStore: TargetStore) {
-    const secondBrowser = await this.puppeteer.launch({ headless: false });
-    const storeDetailPage = await secondBrowser.newPage();
-    await storeDetailPage.goto(targetStore.storeLink, { waitUntil: 'networkidle2' });
-    await storeDetailPage.setViewport({ width: 1024, height: 999999 });
+  private isStoreDuplicate(storeName: string): boolean {
+    const result = this.collectedStores.find((e) => e.storeName === storeName);
+    if (result) return true;
+    return false;
+  }
 
-    storeDetailPage.waitForTimeout(3000).then(async () => {
-      await secondBrowser.close();
+  private getStoreDetail(
+    cheerioDom: any,
+    store: TargetStore,
+    storeDetailSelector: string,
+    emailSelector: string,
+  ): CollectedStoreInfo {
+    const storeDetail: CollectedStoreInfo = {
+      storeName: store.storeName,
+      storeLink: store.storeLink,
+      email: '',
+      searchTerm: this.searchTerm,
+      storeOwner: '',
+      businessRegNum: '',
+      ecomRegNum: '',
+    };
+
+    cheerioDom(storeDetailSelector).each((index: number, element: Record<string, any>) => {
+      const dataElement = element.children[0] as Record<string, any>;
+      index === 1 ? (storeDetail.storeOwner = dataElement.data) : null;
+      index === 2 ? (storeDetail.businessRegNum = dataElement.data) : null;
+      index === 3 ? (storeDetail.ecomRegNum = dataElement.data) : null;
+      index === 4 ? (storeDetail.address = dataElement.data) : null;
+      storeDetail.email = cheerioDom(emailSelector).html() as string;
     });
+
+    return storeDetail;
   }
 }
 
