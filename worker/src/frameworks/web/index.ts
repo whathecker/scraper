@@ -3,6 +3,8 @@ import cors from 'cors';
 import morgan from 'morgan';
 import helmet from 'helmet';
 
+import apiRoutes from './apis';
+
 const server: express.Application = express();
 const port = process.env.PORT || 9000;
 const corsOptions: cors.CorsOptions = {
@@ -18,6 +20,8 @@ server.use(morgan('dev'));
 server.get('/health', async (_req: Request, res: Response) => {
   return res.status(200).type('text/plain').send('200 OK');
 });
+
+server.use(apiRoutes);
 
 server
   .listen(port, () => {
