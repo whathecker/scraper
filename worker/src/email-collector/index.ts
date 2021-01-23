@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-useless-catch*/
-import config from './config';
+import config from '../config';
 import puppeteer from 'puppeteer';
 import cheerio from 'cheerio';
 
@@ -10,18 +10,19 @@ type Puppeteer = typeof puppeteer;
 console.log('hey worker is running');
 
 const searchTarget = config.MAIN_SEARCH_URL || 's';
+console.log(searchTarget);
 const searchTerm = '블루투스이어폰';
 
-const searchBarDomSelector = config.SEARCH_BAR_DOM_SELECTOR || '';
-const searchButtonDomSelector = config.SEARCH_BTN_DOM_SELECTOR || '';
-const totalCountDomSelector = config.TOTAL_COUNT_DOM_SELECTOR || '';
+const searchBarDomSelector = '#autocompleteWrapper input[name="query"]';
+const searchButtonDomSelector = '#autocompleteWrapper a[_clickcode="search"]';
+const totalCountDomSelector = '.subFilter_num__2x0jq';
 
-const storeNameLinkDomSelector = config.STORE_NAME_LINK_DOM_SELECTOR || '';
-const storeDetailDomName = config.STORE_DETAIL_DOM_NAME || '';
-const paginationDomSelector = config.PAGINATION_DOM_SELECTOR || '';
+const storeNameLinkDomSelector = '.basicList_mall__sbVax';
+const storeDetailDomName = 'common_btn_detail__1Fu0c';
+const paginationDomSelector = '.pagination_num__-IkyP a';
 
-const storeDetailTableSelector = config.STORE_DETAIL_TABLE_SELECTOR || '';
-const emailDomSelector = config.EMAIL_DOM_SELECTOR || '';
+const storeDetailTableSelector = '._3fpUfPAXM5';
+const emailDomSelector = '._2bY0n46Os8';
 
 interface IEmailCollector {
   execute(): void;
