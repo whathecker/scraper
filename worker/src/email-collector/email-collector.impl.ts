@@ -1,16 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-useless-catch*/
 import config from '../config';
+import { TargetStore, CollectedStoreInfo } from '../definitions/core';
+import { IEmailCollector } from '../definitions/email-collector';
 import puppeteer from 'puppeteer';
 import cheerio from 'cheerio';
 
-type Cheerio = typeof cheerio;
-type Puppeteer = typeof puppeteer;
-
-console.log('hey worker is running');
-
 const searchTarget = config.MAIN_SEARCH_URL || 's';
-console.log(searchTarget);
 const searchTerm = '블루투스이어폰';
 
 const searchBarDomSelector = '#autocompleteWrapper input[name="query"]';
@@ -24,24 +20,8 @@ const paginationDomSelector = '.pagination_num__-IkyP a';
 const storeDetailTableSelector = '._3fpUfPAXM5';
 const emailDomSelector = '._2bY0n46Os8';
 
-interface IEmailCollector {
-  execute(): void;
-}
-type TargetStore = {
-  storeName: string;
-  storeLink: string;
-};
-
-type CollectedStoreInfo = {
-  storeName: string;
-  storeLink: string;
-  email?: string;
-  searchTerm?: string;
-  storeOwner?: string;
-  businessRegNum?: string;
-  ecomRegNum?: string;
-  address?: string;
-};
+type Cheerio = typeof cheerio;
+type Puppeteer = typeof puppeteer;
 
 class EmailCollector implements IEmailCollector {
   private puppeteer: Puppeteer;
@@ -66,6 +46,7 @@ class EmailCollector implements IEmailCollector {
   }
 
   private async startCollectionProcess(searchTerm: string) {
+    console.log('hey worker is running');
     this.searchTerm = searchTerm;
 
     const browser = await this.puppeteer.launch();
