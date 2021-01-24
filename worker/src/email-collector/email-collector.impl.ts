@@ -1,10 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-useless-catch*/
 import config from '../config';
-import { TargetStore, CollectedStoreInfo } from '../definitions/core';
-import { IEmailCollector } from '../definitions/email-collector';
 import puppeteer from 'puppeteer';
 import cheerio from 'cheerio';
+import redis from 'redis';
+
+import { TargetStore, CollectedStoreInfo } from '../definitions/core';
+import { IEmailCollector } from '../definitions/email-collector';
+import RedisAccessor from '../redis-accessor/redis-accessor.impl';
 
 const searchTarget = config.MAIN_SEARCH_URL || 's';
 const searchTerm = '블루투스이어폰';
@@ -26,14 +29,16 @@ type Puppeteer = typeof puppeteer;
 class EmailCollector implements IEmailCollector {
   private puppeteer: Puppeteer;
   private cheerio: Cheerio;
+  private redisRepository: RedisAccessor;
   private remainingStoreCount: number;
   private paginationView: number;
   private collectedStores: CollectedStoreInfo[];
   private searchTerm: string;
 
-  constructor(puppeteer: Puppeteer, cheerio: Cheerio) {
+  constructor(puppeteer: Puppeteer, cheerio: Cheerio, redisRepository: RedisAccessor) {
     this.puppeteer = puppeteer;
     this.cheerio = cheerio;
+    this.redisRepository = redisRepository;
     this.remainingStoreCount = 0;
     this.paginationView = 40;
     this.collectedStores = [];
@@ -61,7 +66,6 @@ class EmailCollector implements IEmailCollector {
       page,
     );
     const totalStoreCount = await this.getTotalResultCount(searchResultPage, totalCountDomSelector);
-    //TODO: save totalStoreCount in Redis
 
     this.remainingStoreCount = totalStoreCount;
 
@@ -75,6 +79,9 @@ class EmailCollector implements IEmailCollector {
       this.remainingStoreCount -= this.paginationView;
       await searchResultPage.click(paginationDomSelector);
     }
+
+    await this.redisRepository.disconnect();
+    await browser.close();
   }
 
   private async performSearch(searchBarSelector: string, searchBtnSelector: string, keyword: string, page: any) {
@@ -165,14 +172,14 @@ class EmailCollector implements IEmailCollector {
 
           if (storeInfos.length > 0) {
             const storeDetail = this.getStoreDetail(dom, store, storeDetailSelector, emailSelector);
+            await this.redisRepository.saveStoreDetail(storeDetail);
             this.collectedStores.push(storeDetail);
             console.log(this.collectedStores);
             console.log(this.collectedStores.length);
-            // save store detail here
           }
           await secondBrowser.close();
         } catch (e) {
-          throw e;
+          console.log(e);
         }
       }
     }
@@ -214,6 +221,7 @@ class EmailCollector implements IEmailCollector {
   }
 }
 
-const emailCollector = new EmailCollector(puppeteer, cheerio);
+const redisAccessor = new RedisAccessor(redis);
+const emailCollector = new EmailCollector(puppeteer, cheerio, redisAccessor);
 
 emailCollector.execute();
