@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "compile": "rm -rf build/ && tsc -p .",
-    "dev": "nodemon src/email-collector/email-collector.impl.ts",
+    "dev": "nodemon src/frameworks/web/index.ts",
     "start": "npm run compile && node build/frameworks/web/index.js",
     "test": "jest --detectOpenHandles --forceExit",
     "test:unit": "jest '(unit).(test)' --detectOpenHandles",

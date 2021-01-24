@@ -1,4 +1,7 @@
 import * as express from 'express';
+import redis from 'redis';
+import RedisAccessor from '../../../redis-accessor/redis-accessor.impl';
+const redisAccessor = new RedisAccessor(redis);
 
 const router: express.Router = express.Router();
 
@@ -26,10 +29,9 @@ router.put('/process/stop', async (req: express.Request, res: express.Response) 
   return res.status(200).end();
 });
 
-router.get('/process/result', async (req: express.Request, res: express.Response) => {
-  // fetch scraped result from redis and return to client
-  console.log(req);
-  return res.status(200).end();
+router.get('/process/result', async (_req: express.Request, res: express.Response) => {
+  const result = await redisAccessor.getStoreDetails();
+  return res.status(200).json(result);
 });
 
 export default router;
