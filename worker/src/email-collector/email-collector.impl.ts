@@ -198,6 +198,7 @@ class EmailCollector implements IEmailCollector {
       storeOwner: '',
       businessRegNum: '',
       ecomRegNum: '',
+      address: '',
     };
 
     cheerioDom(storeDetailSelector).each((index: number, element: Record<string, any>) => {

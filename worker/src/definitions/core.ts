@@ -6,10 +6,10 @@ export type TargetStore = {
 export type CollectedStoreInfo = {
   storeName: string;
   storeLink: string;
-  email?: string;
-  searchTerm?: string;
-  storeOwner?: string;
-  businessRegNum?: string;
-  ecomRegNum?: string;
-  address?: string;
+  email: string;
+  searchTerm: string;
+  storeOwner: string;
+  businessRegNum: string;
+  ecomRegNum: string;
+  address: string;
 };
