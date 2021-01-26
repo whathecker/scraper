@@ -1,8 +1,9 @@
 import * as express from 'express';
+import { fork } from 'child_process';
 import redis from 'redis';
 import RedisAccessor from '../../../redis-accessor/redis-accessor.impl';
-const redisAccessor = new RedisAccessor(redis);
 
+const redisAccessor = new RedisAccessor(redis);
 const router: express.Router = express.Router();
 
 router.get('/process/totalcount/:searchTerm', async (req: express.Request, res: express.Response) => {
@@ -13,12 +14,12 @@ router.get('/process/totalcount/:searchTerm', async (req: express.Request, res: 
   return res.status(200).end();
 });
 
-router.post('/process/start', async (req: express.Request, res: express.Response) => {
-  console.log(req);
+router.post('/process/start', async (_req: express.Request, res: express.Response) => {
+  const childProcess = fork(__dirname + '../../../../email-collector/email-collector.impl');
+  console.log(childProcess);
   // this request should be a websocket endpoint
   // start the child process and instruct worker to start scraping
   // inform client when requeest stop, finished, errored
-
   // merge put endpoint into this post endpoint (i.e., get input to stop the process as if the server is getting the chat message from client)
   return res.status(200).end();
 });
