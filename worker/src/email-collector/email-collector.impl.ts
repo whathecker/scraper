@@ -1,58 +1,44 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-useless-catch*/
-import config from './config';
+import config from '../config';
 import puppeteer from 'puppeteer';
 import cheerio from 'cheerio';
+import redis from 'redis';
 
-type Cheerio = typeof cheerio;
-type Puppeteer = typeof puppeteer;
-
-console.log('hey worker is running');
+import { TargetStore, CollectedStoreInfo } from '../definitions/core';
+import { IEmailCollector } from '../definitions/email-collector';
+import RedisAccessor from '../redis-accessor/redis-accessor.impl';
 
 const searchTarget = config.MAIN_SEARCH_URL || 's';
 const searchTerm = '블루투스이어폰';
 
-const searchBarDomSelector = config.SEARCH_BAR_DOM_SELECTOR || '';
-const searchButtonDomSelector = config.SEARCH_BTN_DOM_SELECTOR || '';
-const totalCountDomSelector = config.TOTAL_COUNT_DOM_SELECTOR || '';
+const searchBarDomSelector = '#autocompleteWrapper input[name="query"]';
+const searchButtonDomSelector = '#autocompleteWrapper a[_clickcode="search"]';
+const totalCountDomSelector = '.subFilter_num__2x0jq';
 
-const storeNameLinkDomSelector = config.STORE_NAME_LINK_DOM_SELECTOR || '';
-const storeDetailDomName = config.STORE_DETAIL_DOM_NAME || '';
-const paginationDomSelector = config.PAGINATION_DOM_SELECTOR || '';
+const storeNameLinkDomSelector = '.basicList_mall__sbVax';
+const storeDetailDomName = 'common_btn_detail__1Fu0c';
+const paginationDomSelector = '.pagination_num__-IkyP a';
 
-const storeDetailTableSelector = config.STORE_DETAIL_TABLE_SELECTOR || '';
-const emailDomSelector = config.EMAIL_DOM_SELECTOR || '';
+const storeDetailTableSelector = '._3fpUfPAXM5';
+const emailDomSelector = '._2bY0n46Os8';
 
-interface IEmailCollector {
-  execute(): void;
-}
-type TargetStore = {
-  storeName: string;
-  storeLink: string;
-};
-
-type CollectedStoreInfo = {
-  storeName: string;
-  storeLink: string;
-  email?: string;
-  searchTerm?: string;
-  storeOwner?: string;
-  businessRegNum?: string;
-  ecomRegNum?: string;
-  address?: string;
-};
+type Cheerio = typeof cheerio;
+type Puppeteer = typeof puppeteer;
 
 class EmailCollector implements IEmailCollector {
   private puppeteer: Puppeteer;
   private cheerio: Cheerio;
+  private redisRepository: RedisAccessor;
   private remainingStoreCount: number;
   private paginationView: number;
   private collectedStores: CollectedStoreInfo[];
   private searchTerm: string;
 
-  constructor(puppeteer: Puppeteer, cheerio: Cheerio) {
+  constructor(puppeteer: Puppeteer, cheerio: Cheerio, redisRepository: RedisAccessor) {
     this.puppeteer = puppeteer;
     this.cheerio = cheerio;
+    this.redisRepository = redisRepository;
     this.remainingStoreCount = 0;
     this.paginationView = 40;
     this.collectedStores = [];
@@ -65,6 +51,7 @@ class EmailCollector implements IEmailCollector {
   }
 
   private async startCollectionProcess(searchTerm: string) {
+    console.log('hey worker is running');
     this.searchTerm = searchTerm;
 
     const browser = await this.puppeteer.launch();
@@ -79,7 +66,6 @@ class EmailCollector implements IEmailCollector {
       page,
     );
     const totalStoreCount = await this.getTotalResultCount(searchResultPage, totalCountDomSelector);
-    //TODO: save totalStoreCount in Redis
 
     this.remainingStoreCount = totalStoreCount;
 
@@ -93,6 +79,9 @@ class EmailCollector implements IEmailCollector {
       this.remainingStoreCount -= this.paginationView;
       await searchResultPage.click(paginationDomSelector);
     }
+
+    await this.redisRepository.disconnect();
+    await browser.close();
   }
 
   private async performSearch(searchBarSelector: string, searchBtnSelector: string, keyword: string, page: any) {
@@ -183,14 +172,14 @@ class EmailCollector implements IEmailCollector {
 
           if (storeInfos.length > 0) {
             const storeDetail = this.getStoreDetail(dom, store, storeDetailSelector, emailSelector);
+            await this.redisRepository.saveStoreDetail(storeDetail);
             this.collectedStores.push(storeDetail);
             console.log(this.collectedStores);
             console.log(this.collectedStores.length);
-            // save store detail here
           }
           await secondBrowser.close();
         } catch (e) {
-          throw e;
+          console.log(e);
         }
       }
     }
@@ -216,6 +205,7 @@ class EmailCollector implements IEmailCollector {
       storeOwner: '',
       businessRegNum: '',
       ecomRegNum: '',
+      address: '',
     };
 
     cheerioDom(storeDetailSelector).each((index: number, element: Record<string, any>) => {
@@ -231,6 +221,7 @@ class EmailCollector implements IEmailCollector {
   }
 }
 
-const emailCollector = new EmailCollector(puppeteer, cheerio);
+const redisAccessor = new RedisAccessor(redis);
+const emailCollector = new EmailCollector(puppeteer, cheerio, redisAccessor);
 
 emailCollector.execute();
