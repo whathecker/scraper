@@ -33,8 +33,21 @@ router.put('/process/stop', async (_req: express.Request, res: express.Response)
 });
 
 router.get('/process/result', async (_req: express.Request, res: express.Response) => {
-  const result = await redisAccessor.getStoreDetails();
-  return res.status(200).json(result);
+  try {
+    const result = await redisAccessor.getStoreDetails();
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json(error);
+  }
+});
+
+router.delete('/process/result', async (_req: express.Request, res: express.Response) => {
+  try {
+    await redisAccessor.deleteStoreDetails();
+    return res.status(200).end();
+  } catch (error) {
+    return res.status(500).json(error);
+  }
 });
 
 export default router;

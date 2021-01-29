@@ -15,4 +15,5 @@ export interface IRedisAccessor {
   saveStoreDetail(store: CollectedStoreInfo): Promise<AccessResult>;
   getStoreDetails(): Promise<AccessResult>;
   disconnect(): Promise<AccessResult>;
+  deleteStoreDetails(): Promise<AccessResult>;
 }

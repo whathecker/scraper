@@ -57,6 +57,19 @@ class RedisAccessor implements IRedisAccessor {
     }
   }
 
+  async deleteStoreDetails(): Promise<AccessResult> {
+    try {
+      await this.redisClient.flushall();
+      return Promise.resolve({
+        status: AccessStatus.SUCCESS,
+      });
+    } catch (error) {
+      return Promise.reject({
+        status: AccessStatus.FAIL,
+      });
+    }
+  }
+
   private parseRedisData(data: Record<string, string>): CollectedStoreInfo[] {
     const result = [];
     for (const element in data) {
